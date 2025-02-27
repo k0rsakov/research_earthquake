@@ -172,3 +172,4 @@ cython_debug/
 
 # Data Lake
 data/
+cred.py
