@@ -173,3 +173,6 @@ cython_debug/
 # Data Lake
 data/
 cred.py
+
+# Airflow
+logs/
