@@ -46,6 +46,7 @@ def get_and_transfer_api_data_to_s3(**context):
     """"""
 
     start_date, end_date = get_dates(**context)
+    logging.info(f"💻 Start load for dates: {start_date}/{end_date}")
     con = duckdb.connect()
 
     con.sql(
@@ -71,12 +72,12 @@ def get_and_transfer_api_data_to_s3(**context):
     )
 
     con.close()
-    logging.info("✅ download for date success: {context[data_]}" )
+    logging.info(f"✅ Download for date success: {start_date}")
 
 
 with DAG(
     dag_id=DAG_ID,
-    schedule_interval="0 8 * * *",
+    schedule_interval="0 5 * * *",
     default_args=args,
     tags=["s3", "raw"],
     description=SHORT_DESCRIPTION,
@@ -90,8 +91,8 @@ with DAG(
         task_id="start",
     )
 
-    print_airflow_context_values = PythonOperator(
-        task_id="print_airflow_context_values",
+    get_and_transfer_api_data_to_s3 = PythonOperator(
+        task_id="get_and_transfer_api_data_to_s3",
         python_callable=get_and_transfer_api_data_to_s3,
     )
 
@@ -99,4 +100,4 @@ with DAG(
         task_id="end",
     )
 
-    start >> print_airflow_context_values >> end
+    start >> get_and_transfer_api_data_to_s3 >> end
