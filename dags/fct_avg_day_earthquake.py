@@ -62,7 +62,7 @@ with DAG(
         conn_id=PG_CONNECT,
         autocommit=True,
         sql=f"""
-        DROP TABLE IF EXISTS "stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        DROP TABLE IF EXISTS stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
         """,
     )
 
@@ -73,11 +73,12 @@ with DAG(
         sql=f"""
         CREATE TABLE stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}" AS
         SELECT
-            time::date AS date, avg(mag::float)
-            count(*)
+            time::date AS date,
+            avg(mag::float)
         FROM
             ods.fct_earthquake
-        WHERE time::date = '{{{{ data_interval_start.format('YYYY-MM-DD') }}}}'
+        WHERE
+            time::date = '{{{{ data_interval_start.format('YYYY-MM-DD') }}}}'
         GROUP BY 1
         """,
     )
@@ -88,7 +89,10 @@ with DAG(
         autocommit=True,
         sql=f"""
         DELETE FROM {SCHEMA}.{TARGET_TABLE}
-        WHERE date IN (SELECT date FROM stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}")
+        WHERE date IN
+        (
+            SELECT date FROM stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        )
         """,
     )
 
@@ -107,7 +111,7 @@ with DAG(
         conn_id=PG_CONNECT,
         autocommit=True,
         sql=f"""
-        DROP TABLE IF EXISTS "stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        DROP TABLE IF EXISTS stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
         """,
     )
 
