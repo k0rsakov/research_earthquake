@@ -61,7 +61,9 @@ with DAG(
         task_id="drop_stg_table_before",
         conn_id=PG_CONNECT,
         autocommit=True,
-        sql=f"DROP TABLE IF EXISTS stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}",
+        sql=f"""
+        DROP TABLE IF EXISTS "stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        """,
     )
 
     create_stg_table = SQLExecuteQueryOperator(
@@ -69,7 +71,7 @@ with DAG(
         conn_id=PG_CONNECT,
         autocommit=True,
         sql=f"""
-        CREATE TABLE stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}} AS
+        CREATE TABLE stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}" AS
         SELECT
             time::date AS date,
             count(*)
@@ -86,7 +88,7 @@ with DAG(
         autocommit=True,
         sql=f"""
         DELETE FROM {SCHEMA}.{TARGET_TABLE}
-        WHERE date IN (SELECT date FROM stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}})
+        WHERE date IN (SELECT date FROM stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}")
         """,
     )
 
@@ -95,16 +97,18 @@ with DAG(
         conn_id=PG_CONNECT,
         autocommit=True,
         sql=f"""
-            INSERT INTO {SCHEMA}.{TARGET_TABLE}
-            SELECT * FROM stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}
-            """,
+        INSERT INTO {SCHEMA}.{TARGET_TABLE}
+        SELECT * FROM stg."tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        """,
     )
 
     drop_stg_table_after = SQLExecuteQueryOperator(
         task_id="drop_stg_table_after",
         conn_id=PG_CONNECT,
         autocommit=True,
-        sql=f"DROP TABLE IF EXISTS stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}",
+        sql=f"""
+        DROP TABLE IF EXISTS "stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}"
+        """,
     )
 
     end = EmptyOperator(
