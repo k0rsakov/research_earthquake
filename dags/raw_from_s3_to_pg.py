@@ -1,4 +1,5 @@
 import logging
+from tkinter import Variable
 
 import duckdb
 import pendulum
@@ -14,10 +15,15 @@ DAG_ID = "raw_from_api_to_s3"
 # Используемые таблицы в DAG
 LAYER = "raw"
 SOURCE = "earthquake"
+SCHEMA = "ods"
+TARGET_TABLE = "fct_earthquake"
 
 # S3
 ACCESS_KEY = Variable.get("access_key")
 SECRET_KEY = Variable.get("secret_key")
+
+# DuckDB
+PASSWORD = Variable.get("pg_password")
 
 LONG_DESCRIPTION = """
 # LONG DESCRIPTION
@@ -60,14 +66,66 @@ def get_and_transfer_api_data_to_s3(**context):
         SET s3_secret_access_key = '{SECRET_KEY}';
         SET s3_use_ssl = FALSE;
 
-        COPY
-        (
-            SELECT
-                *
-            FROM
-                read_csv_auto('https://earthquake.usgs.gov/fdsnws/event/1/query?format=csv&starttime={start_date}&endtime={end_date}') AS res
-        ) TO 's3://prod/{LAYER}/{SOURCE}/{start_date}/{start_date}_00-00-00.gz.parquet';
+        CREATE SECRET dwh_postgres (
+            TYPE postgres,
+            HOST 'postgres_dwh',
+            PORT 5432,
+            DATABASE postgres,
+            USER 'postgres',
+            PASSWORD {PASSWORD}'
+        );
 
+        ATTACH '' AS dwh_postgres_db (TYPE postgres, SECRET dwh_postgres);
+
+        INSERT INTO dwh_postgres_db.{SCHEMA}.{TARGET_TABLE}
+        (
+            time,
+            latitude,
+            longitude,
+            depth,
+            mag,
+            mag_type,
+            nst,
+            gap,
+            dmin,
+            rms,
+            net,
+            id,
+            updated,
+            place,
+            type,
+            horizontal_error,
+            depth_error,
+            mag_error,
+            mag_nst,
+            status,
+            location_source,
+            mag_source
+        )
+        SELECT
+            time,
+            latitude,
+            longitude,
+            depth,
+            mag,
+            magType AS mag_type,
+            nst,
+            gap,
+            dmin,
+            rms,
+            net,
+            id,
+            updated,
+            place,
+            type,
+            horizontalError AS horizontal_error,
+            depthError AS depth_error,
+            magError AS mag_error,
+            magNst AS mag_nst,
+            status,
+            locationSource AS location_source,
+            magSource AS mag_source
+        FROM 's3://prod/{LAYER}/{SOURCE}/{start_date}/{start_date}_00-00-00.gz.parquet';
         """,
     )
 
