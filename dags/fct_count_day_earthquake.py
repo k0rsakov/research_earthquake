@@ -1,7 +1,7 @@
 import pendulum
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 
 # Конфигурация DAG
@@ -57,15 +57,17 @@ with DAG(
         poke_interval=60,  # частота проверки
     )
 
-    drop_stg_table_before = PostgresOperator(
+    drop_stg_table_before = SQLExecuteQueryOperator(
         task_id="drop_stg_table_before",
-        postgres_conn_id=PG_CONNECT,
+        conn_id=PG_CONNECT,
+        autocommit=True,
         sql=f"DROP TABLE IF EXISTS stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}",
     )
 
-    create_stg_table = PostgresOperator(
+    create_stg_table = SQLExecuteQueryOperator(
         task_id="create_stg_table",
-        postgres_conn_id=PG_CONNECT,
+        conn_id=PG_CONNECT,
+        autocommit=True,
         sql=f"""
         CREATE TABLE stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}} AS
         SELECT
@@ -78,27 +80,30 @@ with DAG(
         """,
     )
 
-    drop_from_target_table = PostgresOperator(
+    drop_from_target_table = SQLExecuteQueryOperator(
         task_id="drop_from_target_table",
-        postgres_conn_id=PG_CONNECT,
+        conn_id=PG_CONNECT,
+        autocommit=True,
         sql=f"""
         DELETE FROM {SCHEMA}.{TARGET_TABLE}
         WHERE date IN (SELECT date FROM stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}})
         """,
     )
 
-    insert_into_target_table = PostgresOperator(
+    insert_into_target_table = SQLExecuteQueryOperator(
         task_id="insert_into_target_table",
-        postgres_conn_id=PG_CONNECT,
+        conn_id=PG_CONNECT,
+        autocommit=True,
         sql=f"""
             INSERT INTO {SCHEMA}.{TARGET_TABLE}
             SELECT * FROM stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}
             """,
     )
 
-    drop_stg_table_after = PostgresOperator(
+    drop_stg_table_after = SQLExecuteQueryOperator(
         task_id="drop_stg_table_after",
-        postgres_conn_id=PG_CONNECT,
+        conn_id=PG_CONNECT,
+        autocommit=True,
         sql=f"DROP TABLE IF EXISTS stg.tmp_{TARGET_TABLE}_{{{{ data_interval_start.format('YYYY-MM-DD') }}}}",
     )
 
@@ -106,4 +111,13 @@ with DAG(
         task_id="end",
     )
 
-    start >> sensor_on_raw_layer >> get_and_transfer_raw_data_to_ods_pg >> end
+    (
+            start >>
+            sensor_on_raw_layer >>
+            drop_stg_table_before >>
+            create_stg_table >>
+            drop_from_target_table >>
+            insert_into_target_table >>
+            drop_stg_table_after >>
+            end
+    )
