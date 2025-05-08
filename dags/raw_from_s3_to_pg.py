@@ -1,5 +1,4 @@
 import logging
-from tkinter import Variable
 
 import duckdb
 import pendulum
@@ -7,10 +6,11 @@ from airflow import DAG
 from airflow.models import Variable
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 
 # Конфигурация DAG
 OWNER = "i.korsakov"
-DAG_ID = "raw_from_api_to_s3"
+DAG_ID = "raw_from_s3_to_pg"
 
 # Используемые таблицы в DAG
 LAYER = "raw"
@@ -48,7 +48,7 @@ def get_dates(**context) -> tuple[str, str]:
     return start_date, end_date
 
 
-def get_and_transfer_api_data_to_s3(**context):
+def get_and_transfer_raw_data_to_ods_pg(**context):
     """"""
 
     start_date, end_date = get_dates(**context)
@@ -72,7 +72,7 @@ def get_and_transfer_api_data_to_s3(**context):
             PORT 5432,
             DATABASE postgres,
             USER 'postgres',
-            PASSWORD {PASSWORD}'
+            PASSWORD '{PASSWORD}'
         );
 
         ATTACH '' AS dwh_postgres_db (TYPE postgres, SECRET dwh_postgres);
@@ -137,7 +137,7 @@ with DAG(
     dag_id=DAG_ID,
     schedule_interval="0 5 * * *",
     default_args=args,
-    tags=["s3", "raw"],
+    tags=["s3", "ods", "pg"],
     description=SHORT_DESCRIPTION,
     concurrency=1,
     max_active_tasks=1,
@@ -149,13 +149,22 @@ with DAG(
         task_id="start",
     )
 
-    get_and_transfer_api_data_to_s3 = PythonOperator(
-        task_id="get_and_transfer_api_data_to_s3",
-        python_callable=get_and_transfer_api_data_to_s3,
+    sensor_on_raw_layer = ExternalTaskSensor(
+            task_id="sensor_on_raw_layer",
+            external_dag_id="raw_from_api_to_s3",
+            allowed_states=["success"],
+            mode="reschedule",
+            timeout=360000,  # длительность работы сенсора
+            poke_interval=60,  # частота проверки
+        )
+
+    get_and_transfer_raw_data_to_ods_pg = PythonOperator(
+        task_id="get_and_transfer_raw_data_to_ods_pg",
+        python_callable=get_and_transfer_raw_data_to_ods_pg,
     )
 
     end = EmptyOperator(
         task_id="end",
     )
 
-    start >> get_and_transfer_api_data_to_s3 >> end
+    start >> sensor_on_raw_layer >> get_and_transfer_raw_data_to_ods_pg >> end
